@@ -73,24 +73,65 @@ class SqlFormCreator {
         // SET kısmını oluşturuyoruz
         $sql .= implode(", ", $set_parts);
     
-        // Eğer UPDATE işlemi yapılacaksa, WHERE koşulunu ekleyelim
+        // Eğer UPDATE işlemi yapılacaksa, WHERE koşulunun oluşturulacağı kısım
         if ($this->method == "UPDATE") {
-            // Dinamik WHERE koşulu oluşturuluyor
+
             if (count($this->update_condition) > 0) {
                 $where_parts = [];
-                foreach ($this->update_condition as $condition) {
+                foreach ($this->update_condition as $index => $condition) {
+                    // Eğer sadece [key, value] varsa, otomatik olarak '=' operatörü ekleyip sizi
+                    // gereksiz zahmetten kurtarıyorum 8D
                     if (count($condition) == 2) {
-                        $key = $condition[0];
-                        $value = $condition[1];
-                        if ($key !== '' && !empty($value)) { // Boş anahtar ve değer kontrolü
-                            // WHERE koşulundaki parametre adı 'update_' ekleyerek ayrıştırılıyor
-                            $where_parts[] = "{$key} = :update_{$key}";
-                            $params["update_{$key}"] = $value; // Parametreyi ekleyelim
+                        list($key, $value) = $condition;
+                        $operator = '=';
+                    }
+                    // Eğer [key, operator, value] ise doğrudan kullanalım
+                    elseif (count($condition) == 3) {
+                        list($key, $operator, $value) = $condition;
+                    } else {
+                        continue; // Geçersiz yapı
+                    }
+
+                    // Güvenlik için sadece izin verilen operatörler kullanılıyor. İsterseniz değiştirebilirsiniz.
+                    $allowed_operators = ['=', '!=', '<', '>', '<=', '>=', 'LIKE', 'IN', 'NOT IN'];
+                    if (!in_array(strtoupper($operator), $allowed_operators)) {
+                        continue;
+                    }
+
+                    if (in_array(strtoupper($operator), ['IN', 'NOT IN']) && is_array($value)) {
+                        $placeholders = [];
+                        foreach ($value as $i => $val) {
+                            $ph = "update_{$key}_{$index}_$i";
+                            $placeholders[] = ":$ph";
+                            $params[$ph] = $val;
                         }
+                        $where_parts[] = "{$key} {$operator} (" . implode(", ", $placeholders) . ")";
+                    } else {
+                        $ph = "update_{$key}_{$index}";
+                        $where_parts[] = "{$key} {$operator} :$ph";
+                        $params[$ph] = $value;
                     }
                 }
-                $sql .= " WHERE " . implode(" AND ", $where_parts);
+
+                if (!empty($where_parts)) {
+                    $sql .= " WHERE " . implode(" AND ", $where_parts);
+                }
             }
+            // if (count($this->update_condition) > 0) {
+            //     $where_parts = [];
+            //     foreach ($this->update_condition as $condition) {
+            //         if (count($condition) == 2) {
+            //             $key = $condition[0];
+            //             $value = $condition[1];
+            //             if ($key !== '' && !empty($value)) { // Boş anahtar ve değer kontrolü
+            //                 // WHERE koşulundaki parametre adı 'update_' ekleyerek ayrıştırılıyor
+            //                 $where_parts[] = "{$key} = :update_{$key}";
+            //                 $params["update_{$key}"] = $value; // Parametreyi ekleyelim
+            //             }
+            //         }
+            //     }
+            //     $sql .= " WHERE " . implode(" AND ", $where_parts);
+            // }
     
             // Burada id'yi manuel olarak ekliyoruz
             if (isset($this->form_data['id']) && !empty($this->form_data['id'])) {
