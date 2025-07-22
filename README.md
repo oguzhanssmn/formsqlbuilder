@@ -1,2 +1,2 @@
 # formsqlbuilder
-A php class to save you from boring instert and update sql
+A php class to save you from boring insert and update sql
